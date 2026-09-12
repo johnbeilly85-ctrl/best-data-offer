@@ -76,18 +76,33 @@ async function sendStkPush(phone, amount) {
     TransactionDesc: `Data package Ksh ${amount}`
   };
 
-  const response = await axios.post(
-    "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
-    stkData,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
+  try {
+    const response = await axios.post(
+      "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+      stkData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
       }
-    }
-  );
+    );
 
-  return response.data;
+    console.log("========== STK PUSH SUCCESS ==========");
+    console.log(JSON.stringify(response.data, null, 2));
+    console.log("======================================");
+
+    return response.data;
+
+  } catch (error) {
+    console.log("========== STK PUSH ERROR ==========");
+    console.log("Status:", error.response?.status);
+    console.log("Response:", JSON.stringify(error.response?.data, null, 2));
+    console.log("Message:", error.message);
+    console.log("====================================");
+
+    throw error;
+  }
 }
 
 // USSD
