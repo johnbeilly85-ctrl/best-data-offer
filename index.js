@@ -2,221 +2,148 @@ const express = require("express");
 const axios = require("axios");
 
 const app = express();
-
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
-// M-Pesa credentials from Render Environment Variables
-const CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY;
-const CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET;
-const PASSKEY = process.env.MPESA_PASSKEY;
-const SHORTCODE = process.env.MPESA_SHORTCODE;
-const CALLBACK_URL = process.env.MPESA_CALLBACK_URL;
+const CONSUMER_KEY = process.env.CONSUMER_KEY;
+const CONSUMER_SECRET = process.env.CONSUMER_SECRET;
+const BUSINESS_SHORT_CODE = process.env.BUSINESS_SHORT_CODE || "174379";
+const PASSKEY = process.env.PASSKEY;
+const CALLBACK_URL = process.env.CALLBACK_URL;
 
-// Home page
-app.get("/", (req, res) => {
-  res.send("Best Data Offer is running");
-});
+function getTimestamp() {
+  const d = new Date();
+  return d.getFullYear().toString() +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    String(d.getDate()).padStart(2, "0") +
+    String(d.getHours()).padStart(2, "0") +
+    String(d.getMinutes()).padStart(2, "0") +
+    String(d.getSeconds()).padStart(2, "0");
+}
 
-// Get M-Pesa access token
 async function getAccessToken() {
-  const auth = Buffer.from(
-    `${CONSUMER_KEY}:${CONSUMER_SECRET}`
-  ).toString("base64");
+  const auth = Buffer.from(`${CONSUMER_KEY}:${CONSUMER_SECRET}`).toString("base64");
 
   const response = await axios.get(
-    "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+    "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
     {
       headers: {
-        Authorization: `Basic ${auth}`
-      }
+        Authorization: `Basic ${auth}`,
+      },
     }
   );
 
   return response.data.access_token;
 }
 
-// Send STK Push
-async function sendStkPush(phone, amount) {
-  const token = await getAccessToken();
-
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[-:TZ.]/g, "")
-    .slice(0, 14);
-
+async function sendSTKPush(phoneNumber, amount) {
+  const accessToken = await getAccessToken();
+  const timestamp = getTimestamp();
   const password = Buffer.from(
-    `${SHORTCODE}${PASSKEY}${timestamp}`
+    BUSINESS_SHORT_CODE + PASSKEY + timestamp
   ).toString("base64");
 
-  // Convert 07XXXXXXXX to 2547XXXXXXXX
-  let phoneNumber = phone.replace(/\s+/g, "");
+  const phone = phoneNumber.replace("+", "");
 
-  if (phoneNumber.startsWith("0")) {
-    phoneNumber = "254" + phoneNumber.substring(1);
-  }
-
-  if (phoneNumber.startsWith("+")) {
-    phoneNumber = phoneNumber.substring(1);
-  }
-
-  const stkData = {
-    BusinessShortCode: SHORTCODE,
+  const stkPushData = {
+    BusinessShortCode: BUSINESS_SHORT_CODE,
     Password: password,
     Timestamp: timestamp,
     TransactionType: "CustomerPayBillOnline",
     Amount: amount,
-    PartyA: phoneNumber,
-    PartyB: SHORTCODE,
-    PhoneNumber: phoneNumber,
+    PartyA: phone,
+    PartyB: BUSINESS_SHORT_CODE,
+    PhoneNumber: phone,
     CallBackURL: CALLBACK_URL,
     AccountReference: "Best Data Offer",
-    TransactionDesc: `Data package Ksh ${amount}`
+    TransactionDesc: "Data Bundle Purchase",
   };
 
   try {
     const response = await axios.post(
       "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
-      stkData,
+      stkPushData,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-        }
+          Authorization: `Bearer ${accessToken}`,
+        },
       }
     );
 
     console.log("========== STK PUSH SUCCESS ==========");
-    console.log(JSON.stringify(response.data, null, 2));
+    console.log(response.data);
     console.log("======================================");
 
-    return response.data;
-
+    return true;
   } catch (error) {
     console.log("========== STK PUSH ERROR ==========");
-    console.log("Status:", error.response?.status);
-    console.log("Response:", JSON.stringify(error.response?.data, null, 2));
+    console.log("HTTP Status:", error.response?.status);
+    console.log("Response Data:", error.response?.data);
     console.log("Message:", error.message);
+
+    if (error.response?.config?.data) {
+      console.log("Request Body Sent:");
+      console.log(error.response.config.data);
+    }
+
     console.log("====================================");
 
-    throw error;
+    return false;
   }
 }
 
-// USSD
 app.post("/ussd", async (req, res) => {
-  const sessionId = req.body.sessionId || "";
-  const serviceCode = req.body.serviceCode || "";
-  const phoneNumber = req.body.phoneNumber || "";
-  const text = req.body.text || "";
+  console.log("USSD request:", req.body);
 
-  console.log("USSD request:", {
-    sessionId,
-    serviceCode,
-    phoneNumber,
-    text
-  });
+  const { text, phoneNumber } = req.body;
 
-  // First menu
+  let response = "";
+
   if (text === "") {
-    return res.send(
-      `CON Welcome to Best Data Offer
-1. Buy Data
-2. Exit`
-    );
+    response = `CON Welcome to Best Data Offer
+1. Buy Data Bundle
+2. Check Balance
+3. Customer Support`;
+  } else if (text === "1") {
+    response = `CON Select Bundle
+1. Ksh 100 - 25GB (No Expiry)
+2. Ksh 250 - 85GB (No Expiry)
+3. Ksh 500 - 200GB (No Expiry)`;
+  } else if (text === "1*1") {
+    const sent = await sendSTKPush(phoneNumber, 100);
+    response = sent
+      ? "END M-Pesa prompt sent. Check your phone."
+      : "END Could not send M-Pesa payment request.";
+  } else if (text === "1*2") {
+    const sent = await sendSTKPush(phoneNumber, 250);
+    response = sent
+      ? "END M-Pesa prompt sent. Check your phone."
+      : "END Could not send M-Pesa payment request.";
+  } else if (text === "1*3") {
+    const sent = await sendSTKPush(phoneNumber, 500);
+    response = sent
+      ? "END M-Pesa prompt sent. Check your phone."
+      : "END Could not send M-Pesa payment request.";
+  } else if (text === "2") {
+    response = "END Balance feature coming soon.";
+  } else if (text === "3") {
+    response = "END Contact Support: +254729029717";
+  } else {
+    response = "END Invalid option.";
   }
 
-  // Buy Data menu
-  if (text === "1") {
-    return res.send(
-      `CON Select Data Package
-1. Ksh 100 - 25GB Not Expiring
-2. Ksh 250 - 85GB Not Expiring
-3. Ksh 500 - 200GB Not Expiring`
-    );
-  }
-
-  // Ksh 100 package
-  if (text === "1*1") {
-    try {
-      await sendStkPush(phoneNumber, 100);
-
-      return res.send(
-        `END M-Pesa payment request sent to ${phoneNumber}.
-Please check your phone and enter your M-Pesa PIN to pay Ksh 100 for 25GB Not Expiring.`
-      );
-    } catch (error) {
-      console.error(
-        "STK Push Error:",
-        error.response?.data || error.message
-      );
-
-      return res.send(
-        `END We could not send the M-Pesa payment request. Please try again later.`
-      );
-    }
-  }
-
-  // Ksh 250 package
-  if (text === "1*2") {
-    try {
-      await sendStkPush(phoneNumber, 250);
-
-      return res.send(
-        `END M-Pesa payment request sent to ${phoneNumber}.
-Please check your phone and enter your M-Pesa PIN to pay Ksh 250 for 85GB Not Expiring.`
-      );
-    } catch (error) {
-      console.error(
-        "STK Push Error:",
-        error.response?.data || error.message
-      );
-
-      return res.send(
-        `END We could not send the M-Pesa payment request. Please try again later.`
-      );
-    }
-  }
-
-  // Ksh 500 package
-  if (text === "1*3") {
-    try {
-      await sendStkPush(phoneNumber, 500);
-
-      return res.send(
-        `END M-Pesa payment request sent to ${phoneNumber}.
-Please check your phone and enter your M-Pesa PIN to pay Ksh 500 for 200GB Not Expiring.`
-      );
-    } catch (error) {
-      console.error(
-        "STK Push Error:",
-        error.response?.data || error.message
-      );
-
-      return res.send(
-        `END We could not send the M-Pesa payment request. Please try again later.`
-      );
-    }
-  }
-
-  // Exit
-  if (text === "2") {
-    return res.send("END Thank you for using Best Data Offer.");
-  }
-
-  return res.send("END Invalid option. Please try again.");
+  res.set("Content-Type", "text/plain");
+  res.send(response);
 });
 
-// M-Pesa callback
-app.post("/mpesa/callback", (req, res) => {
-  console.log("M-Pesa Callback:", JSON.stringify(req.body, null, 2));
+app.post("/callback", (req, res) => {
+  console.log("========== M-PESA CALLBACK ==========");
+  console.log(JSON.stringify(req.body, null, 2));
+  console.log("=====================================");
 
-  res.json({
-    ResultCode: 0,
-    ResultDesc: "Accepted"
-  });
+  res.json({ ResultCode: 0, ResultDesc: "Accepted" });
 });
 
 app.listen(PORT, () => {
