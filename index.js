@@ -1,3 +1,4 @@
+const express = require("express");
 const app = express();
 
 app.use(express.urlencoded({ extended: false }));
@@ -22,25 +23,28 @@ app.post("/ussd", (req, res) => {
 3. Ksh 500 - 1000GB (No Expiry)`;
 
   } else if (text === "1*1") {
-    response = `END To activate 45GB, pay Ksh 100 to Till Number 1714273.
+    response = `END Pay Ksh 100 to Till 1714273
+Business: Amazing Data
 
-Business Name: Amazing Data.
+45GB No Expiry
 
-After payment, dial the USSD again and check your balance.`;
+After payment, dial *384*43004# again to check your balance.`;
 
   } else if (text === "1*2") {
-    response = `END To activate 100GB, pay Ksh 250 to Till Number 1714273.
+    response = `END Pay Ksh 250 to Till 1714273
+Business: Amazing Data
 
-Business Name: Amazing Data.
+100GB No Expiry
 
-After payment, dial the USSD again and check your balance.`;
+After payment, dial *384*43004# again to check your balance.`;
 
   } else if (text === "1*3") {
-    response = `END To activate 1000GB, pay Ksh 500 to Till Number 1714273.
+    response = `END Pay Ksh 500 to Till 1714273
+Business: Amazing Data
 
-Business Name: Amazing Data.
+1000GB No Expiry
 
-After payment, dial the USSD again and check your balance.`;
+After payment, dial *384*43004# again to check your balance.`;
 
   } else if (text === "2") {
     response = `END Balance feature coming soon.`;
@@ -54,4 +58,16 @@ WhatsApp: +254750536849`;
     response = `END Invalid choice. Please try again.`;
   }
 
-  res.set("Content-Type", "text/plain
+  res.set("Content-Type", "text/plain");
+  res.send(response);
+});
+
+app.get("/", (req, res) => {
+  res.send("Amazing Data USSD Server is Running.");
+});
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Amazing Data USSD Server running on port ${PORT}`);
+});
