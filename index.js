@@ -1,4 +1,3 @@
-const express = require("express");
 const app = express();
 
 app.use(express.urlencoded({ extended: false }));
@@ -55,16 +54,4 @@ WhatsApp: +254750536849`;
     response = `END Invalid choice. Please try again.`;
   }
 
-  res.set("Content-Type", "text/plain");
-  res.send(response);
-});
-
-app.get("/", (req, res) => {
-  res.send("Amazing Data USSD Server is Running.");
-});
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`Amazing Data USSD Server running on port ${PORT}`);
-});
+  res.set("Content-Type", "text/plain
